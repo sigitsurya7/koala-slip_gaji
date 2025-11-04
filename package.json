@@ -6,7 +6,11 @@
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint --fix"
+    "lint": "eslint --fix",
+    "prisma:generate": "prisma generate",
+    "db:push": "prisma db push",
+    "db:seed": "ts-node --compiler-options '{\"module\":\"commonjs\"}' prisma/seed.ts || node --loader ts-node/esm prisma/seed.ts",
+    "check:slip": "node scripts/check-slip.js"
   },
   "dependencies": {
     "@heroui/accordion": "2.2.24",
@@ -49,20 +53,35 @@
     "@heroui/toast": "2.0.17",
     "@heroui/tooltip": "2.2.24",
     "@heroui/user": "2.2.22",
+    "@prisma/client": "^6.18.0",
     "@react-aria/ssr": "3.9.10",
     "@react-aria/visually-hidden": "3.8.28",
+    "axios": "^1.13.1",
+    "bcryptjs": "^3.0.3",
     "clsx": "2.1.1",
     "framer-motion": "11.18.2",
     "intl-messageformat": "10.7.16",
+    "jsonwebtoken": "^9.0.2",
+    "jspdf": "^3.0.3",
+    "jspdf-autotable": "^5.0.2",
     "next": "15.3.1",
     "next-themes": "0.4.6",
+    "nodemailer": "^6.10.1",
     "react": "18.3.1",
-    "react-dom": "18.3.1"
+    "react-dom": "18.3.1",
+    "react-hot-toast": "^2.6.0",
+    "react-icons": "^5.5.0",
+    "xlsx": "^0.18.5"
+  },
+  "prisma": {
+    "seed": "node prisma/seed.js"
   },
   "devDependencies": {
     "@next/eslint-plugin-next": "15.3.4",
     "@react-types/shared": "3.32.1",
     "@tailwindcss/postcss": "4.1.11",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/jspdf": "^1.3.3",
     "@types/node": "20.5.7",
     "@types/react": "18.3.3",
     "@types/react-dom": "18.3.0",
@@ -81,8 +100,10 @@
     "globals": "16.0.0",
     "postcss": "8.5.6",
     "prettier": "3.5.3",
+    "prisma": "^6.18.0",
     "tailwind-variants": "3.1.1",
     "tailwindcss": "4.1.11",
+    "ts-node": "10.9.2",
     "typescript": "5.6.3"
   }
 }
