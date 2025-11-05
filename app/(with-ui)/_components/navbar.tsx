@@ -2,6 +2,9 @@
 
 import Link from "next/link";
 import { Navbar as HeroUINavbar, NavbarBrand, NavbarContent, NavbarItem } from "@heroui/navbar";
+import {Dropdown, DropdownTrigger, DropdownMenu, DropdownItem} from "@heroui/dropdown";
+import { Avatar } from "@heroui/avatar";
+import { User } from "@heroui/user";
 import { Button } from "@heroui/button";
 import { MdMenu } from "react-icons/md";
 
@@ -23,12 +26,35 @@ export function AdminNavbar({ user, loading, onLogout, onOpenSidebar }: {
       </NavbarBrand>
       <NavbarContent justify="end">
         <NavbarItem>
-          <span className="text-sm text-default-500">
-            {loading ? "Loading..." : user ? `Welcome, ${user?.username}` : ""}
-          </span>
-        </NavbarItem>
-        <NavbarItem>
-          <Button size="sm" variant="flat" onPress={onLogout}>Logout</Button>
+          {loading ?
+            <></>
+            :
+            <Dropdown placement="bottom-start">
+              <DropdownTrigger>
+                <User
+                  as="button"
+                  avatarProps={{
+                    isBordered: true,
+                    src: "https://api.dicebear.com/9.x/avataaars/svg?seed="+ (user ? user?.username : ""),
+                  }}
+                  className="transition-transform"
+                  description={user ? "@" + user.role : ""}
+                  name={user ? user?.username : ""}
+                />
+              </DropdownTrigger>
+              <DropdownMenu aria-label="User Actions" variant="flat">
+                <DropdownItem key="profile" className="h-14 gap-2">
+                  <p className="font-bold">Signed in as</p>
+                  <p className="font-bold">{user?.username}</p>
+                </DropdownItem>
+                <DropdownItem key="settings">My Settings</DropdownItem>
+                <DropdownItem key="logout" className="text-danger" color="danger" onPress={onLogout}>
+                  Log Out
+                </DropdownItem>
+              </DropdownMenu>
+            </Dropdown>
+          }
+
         </NavbarItem>
       </NavbarContent>
     </HeroUINavbar>

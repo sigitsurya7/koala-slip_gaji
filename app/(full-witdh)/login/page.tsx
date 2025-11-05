@@ -55,9 +55,6 @@ export default function LoginPage() {
               Login
             </Button>
           </form>
-          <p className="text-xs text-default-500 mt-4 text-center">
-            Demo: admin/admin123 atau member/member123
-          </p>
         </Card>
       </div>
     </section>

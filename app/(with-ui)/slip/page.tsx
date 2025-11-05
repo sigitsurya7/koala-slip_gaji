@@ -5,10 +5,11 @@ import { Button } from "@heroui/button";
 import { Input } from "@heroui/input";
 import { Select, SelectItem } from "@heroui/select";
 import { Pagination } from "@heroui/pagination";
+import { Modal, ModalContent, ModalHeader, ModalBody, ModalFooter } from "@heroui/modal";
 import toast from "react-hot-toast";
 import { parseSlipWorkbook, SlipImportResult } from "@/lib/slip-import";
 import { generateSlipPDF } from "@/lib/slipPage";
-import { MdPictureAsPdf, MdEmail } from "react-icons/md";
+import { MdPictureAsPdf, MdEmail, MdOutlineArrowBack } from "react-icons/md";
 
 function cleanHeaderLabel(h: string): string {
   return h
@@ -36,6 +37,9 @@ export default function SlipPage(): JSX.Element {
   const [selectedRS, setSelectedRS] = useState<string>("RS ANANDA BEKASI");
   const fileRef = useRef<HTMLInputElement>(null);
   const [logoImg, setLogoImg] = useState<HTMLImageElement | null>(null);
+  const [showLogs, setShowLogs] = useState(false);
+  const [logs, setLogs] = useState<Array<{ id:number; email:string; name?:string; rsName?:string; periode:string; createdAt:string }>>([]);
+  const [loadingLogs, setLoadingLogs] = useState(false);
 
   useEffect(() => {
     const img = new Image();
@@ -182,7 +186,7 @@ export default function SlipPage(): JSX.Element {
       });
       if (!mailRes.ok) throw new Error("Gagal kirim email di server");
       const out = await mailRes.json();
-      toast.success(`Email terkirim: ${out.sent}, gagal: ${out.failed?.length ?? 0}`, { id: toastId });
+      toast.success(`Email terkirim: ${out.sent}, lewati: ${out.skipped}, gagal: ${out.failed?.length ?? 0}`, { id: toastId });
     } catch (e: any) {
       console.error(e);
       toast.error(e?.message || "Gagal kirim email", { id: toastId });
@@ -214,166 +218,176 @@ export default function SlipPage(): JSX.Element {
 
 
   return (
-    <div className="p-6 space-y-4 overflow-x-auto">
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <Button variant="flat" onPress={() => { setData(null); setSearch(""); setPage(1); }}>Kembali</Button>
-            <h2 className="text-2xl font-semibold">Slip Gaji (Preview)</h2>
+    <>
+      <div className="p-6 space-y-4 overflow-x-auto">
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <div className="flex items-center justify-between w-full gap-3">
+            <div className="flex items-center gap-2">
+              <Button variant="flat" onPress={() => { setData(null); setSearch(""); setPage(1); }} isIconOnly><MdOutlineArrowBack /></Button>
+              <h2 className="text-2xl font-semibold">Slip Gaji (Preview)</h2>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button color="secondary" onPress={handlePreviewPDF}>Preview PDF</Button>
+              <Button color="primary" onPress={handleGeneratePDF}>Generate PDF</Button>
+              <Button color="success" variant="flat" startContent={<MdEmail />} onPress={handleSendEmail}>Kirim Email</Button>
+              <Button variant="flat" onPress={async ()=>{
+                try {
+                  setLoadingLogs(true); setShowLogs(true);
+                  const q = encodeURIComponent(data.periode ?? "");
+                  const res = await fetch(`/api/slips/email/logs?periode=${q}`);
+                  const js = await res.json();
+                  setLogs(js.logs || []);
+                } catch (e){ console.error(e); setLogs([]);} finally { setLoadingLogs(false); }
+              }}>List Terkirim</Button>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Button color="secondary" onPress={handlePreviewPDF}>Preview PDF</Button>
-            <Button color="primary" onPress={handleGeneratePDF}>Generate PDF</Button>
-            <Button color="success" variant="flat" startContent={<MdEmail />} onPress={handleSendEmail}>Kirim Email</Button>
+          <div className="flex items-end gap-3">
+            <div className="w-64">
+              <Select label="Pilih Rumah Sakit" selectedKeys={[selectedRS]} onChange={(e) => setSelectedRS(e.target.value)}>
+                {Object.keys(hospitals).map((k) => (
+                  <SelectItem key={k}>{k}</SelectItem>
+                ))}
+              </Select>
+            </div>
+            <div className="text-xs text-default-500 max-w-md">Alamat: {hospitals[selectedRS]}</div>
           </div>
+          <Input
+            placeholder="Cari nama, jabatan..."
+            value={search}
+            onChange={(e) => {
+              setPage(1);
+              setSearch(e.target.value);
+            }}
+            className="max-w-xs"
+          />
         </div>
-        <div className="flex items-end gap-3">
-          <div className="w-64">
-            <Select label="Pilih Rumah Sakit" selectedKeys={[selectedRS]} onChange={(e) => setSelectedRS(e.target.value)}>
-              {Object.keys(hospitals).map((k) => (
-                <SelectItem key={k}>{k}</SelectItem>
-              ))}
-            </Select>
-          </div>
-          <div className="text-xs text-default-500 max-w-md">Alamat: {hospitals[selectedRS]}</div>
-        </div>
-        <Input
-          placeholder="Cari nama, jabatan..."
-          value={search}
-          onChange={(e) => {
-            setPage(1);
-            setSearch(e.target.value);
-          }}
-          className="max-w-xs"
-        />
-      </div>
 
-      {/* TABLE */}
-      <div className="overflow-x-auto border border-gray-300 rounded-lg">
-        <table className="min-w-full text-sm border-collapse">
-          <thead>
-            {/* HEADER 1 */}
-            <tr>
-              {order.map((g) => {
-                if (!g.cols.length) return null;
+        {/* TABLE */}
+        <div className="overflow-x-auto border border-gray-300 rounded-lg">
+          <table className="min-w-full text-sm border-collapse">
+            <thead>
+              {/* HEADER 1 */}
+              <tr>
+                {order.map((g) => {
+                  if (!g.cols.length) return null;
 
-                // Kolom rowspan (IDENTITAS, KONTAK, TOTAL, PENDAPATAN)
-                if (["IDENTITAS", "KONTAK", "PENDAPATAN", "TOTAL"].includes(g.key)) {
+                  // Kolom rowspan (IDENTITAS, KONTAK, TOTAL, PENDAPATAN)
+                  if (["IDENTITAS", "KONTAK", "PENDAPATAN", "TOTAL"].includes(g.key)) {
+                    return g.cols.map((h) => (
+                      <th
+                        key={`grp-${g.key}-${h}`}
+                        rowSpan={2}
+                        className="border px-2 py-1 bg-gray-50 text-center"
+                      >
+                        {cleanHeaderLabel(h)}
+                      </th>
+                    ));
+                  }
+
+                  return (
+                    <React.Fragment key={`grp-${g.key}`}>
+                      <th
+                        colSpan={g.cols.length}
+                        className="border px-2 py-1 text-center"
+                      >
+                        {g.key.replace("TUNJANGAN", "TUNJANGAN YG DIBAYARKAN")}
+                      </th>
+                    </React.Fragment>
+                  );
+                })}
+                  {/* Tambah kolom aksi (rowspan=2) */}
+                  <th rowSpan={2} className="border px-2 py-1 bg-gray-50 text-center">Aksi</th>
+              </tr>
+
+              {/* HEADER 2 */}
+              <tr>
+                {order.map((g) => {
+                  if (
+                    ["IDENTITAS", "KONTAK", "PENDAPATAN", "TOTAL"].includes(g.key)
+                  )
+                    return null;
                   return g.cols.map((h) => (
                     <th
-                      key={`grp-${g.key}-${h}`}
-                      rowSpan={2}
+                      key={`sub-${g.key}-${h}`}
                       className="border px-2 py-1 bg-gray-50 text-center"
                     >
                       {cleanHeaderLabel(h)}
                     </th>
                   ));
-                }
-
-                return (
-                  <React.Fragment key={`grp-${g.key}`}>
-                    <th
-                      colSpan={g.cols.length}
-                      className="border px-2 py-1 text-center"
-                    >
-                      {g.key.replace("TUNJANGAN", "TUNJANGAN YG DIBAYARKAN")}
-                    </th>
-                  </React.Fragment>
-                );
-              })}
-                {/* Tambah kolom aksi (rowspan=2) */}
-                <th rowSpan={2} className="border px-2 py-1 bg-gray-50 text-center">Aksi</th>
-            </tr>
-
-            {/* HEADER 2 */}
-            <tr>
-              {order.map((g) => {
-                if (
-                  ["IDENTITAS", "KONTAK", "PENDAPATAN", "TOTAL"].includes(g.key)
-                )
-                  return null;
-                return g.cols.map((h) => (
-                  <th
-                    key={`sub-${g.key}-${h}`}
-                    className="border px-2 py-1 bg-gray-50 text-center"
-                  >
-                    {cleanHeaderLabel(h)}
-                  </th>
-                ));
-              })}
-            </tr>
-          </thead>
-
-          <tbody>
-            {filteredRows.map((row, i) => (
-              <tr key={`row-${i}`} className="hover:bg-gray-50">
-                {headers.map((h) => {
-                  const v = row[h];
-                  const num = typeof v === "number"
-                    ? v
-                    : Number(String(v ?? "").replace(/[^0-9.,-]/g, "").replace(/,/g, ".")) || NaN;
-                  const formatted =
-                    !isNaN(num) && /gaji|pendapatan|potongan|tunjangan|lembur|bpjs/i.test(h)
-                      ? new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(num)
-                      : String(v ?? "");
-                  return (
-                    <td key={`cell-${i}-${h}`} className="border px-2 py-1 text-center">
-                      {formatted}
-                    </td>
-                  );
                 })}
-                <td className="border px-2 py-1 text-center">
-                  <div className="flex items-center justify-center gap-2">
-                  <Button size="sm" variant="flat" startContent={<MdPictureAsPdf />}
-                    onPress={() => {
-                      try {
-                        const doc = generateSlipPDF(row, {
-                          periode: data.periode ?? "",
-                          hospitalName: selectedRS,
-                          hospitalAddress: hospitals[selectedRS],
-                          logo: logoImg ?? null,
-                        });
-                        const filename = `${row["NIK"] || "slip"}_${row["NAMA"] || row["Nama"] || ""}.pdf`;
-                        doc.save(filename);
-                      } catch (e) {
-                        console.error(e);
-                        toast.error("Gagal membuat PDF");
-                      }
-                    }}
-                  >PDF</Button>
-                  <Button size="sm" color="success" variant="flat" startContent={<MdEmail />}
-                    onPress={async () => {
-                      try {
-                        const email: string = (row["Email"] || row["EMAIL"] || row["email"] || "").toString();
-                        if (!validateEmail(email)) return toast.error("Email tidak valid / kosong");
-                        const filename = `${row["NIK"] || "slip"}_${row["NAMA"] || row["Nama"] || ""}.pdf`.replace(/[^\w\-.]+/g, "_");
-                        const rsSlug = slugify(selectedRS);
-                        const periodeSlug = slugify(data.periode ?? "");
-                        const publicPath = `/${rsSlug}/${periodeSlug}/${filename}`;
+              </tr>
+            </thead>
 
-                        // Cek apakah file sudah ada di public
-                        let exists = false;
+            <tbody>
+              {filteredRows.map((row, i) => (
+                <tr key={`row-${i}`} className="hover:bg-gray-50">
+                  {headers.map((h) => {
+                    const v = row[h];
+                    const num = typeof v === "number"
+                      ? v
+                      : Number(String(v ?? "").replace(/[^0-9.,-]/g, "").replace(/,/g, ".")) || NaN;
+                    const formatted =
+                      !isNaN(num) && /gaji|pendapatan|potongan|tunjangan|lembur|bpjs/i.test(h)
+                        ? new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(num)
+                        : String(v ?? "");
+                    return (
+                      <td key={`cell-${i}-${h}`} className="border px-2 py-1 text-center">
+                        {formatted}
+                      </td>
+                    );
+                  })}
+                  <td className="border px-2 py-1 text-center">
+                    <div className="flex items-center justify-center gap-2">
+                    <Button size="sm" variant="flat" startContent={<MdPictureAsPdf />}
+                      onPress={() => {
                         try {
-                          const head = await fetch(publicPath, { method: "HEAD" });
-                          exists = head.ok;
-                        } catch {}
-
-                        if (!exists) {
-                          // generate hanya untuk baris ini di server
-                          const gen = await fetch("/api/slips/generate", {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({
-                              rsName: selectedRS,
-                              rsAddress: hospitals[selectedRS],
-                              periode: data.periode ?? "",
-                              rows: [row],
-                            }),
+                          const doc = generateSlipPDF(row, {
+                            periode: data.periode ?? "",
+                            hospitalName: selectedRS,
+                            hospitalAddress: hospitals[selectedRS],
+                            logo: logoImg ?? null,
                           });
-                          if (!gen.ok) return toast.error("Gagal generate PDF di server");
+                          const filename = `${row["NIK"] || "slip"}_${row["NAMA"] || row["Nama"] || ""}.pdf`;
+                          doc.save(filename);
+                        } catch (e) {
+                          console.error(e);
+                          toast.error("Gagal membuat PDF");
                         }
+                      }}
+                    >PDF</Button>
+                    <Button size="sm" color="success" variant="flat" startContent={<MdEmail />}
+                      onPress={async () => {
+                        try {
+                          const email: string = (row["Email"] || row["EMAIL"] || row["email"] || "").toString();
+                          if (!validateEmail(email)) return toast.error("Email tidak valid / kosong");
+                          const filename = `${row["NIK"] || "slip"}_${row["NAMA"] || row["Nama"] || ""}.pdf`.replace(/[^\w\-.]+/g, "_");
+                          const rsSlug = slugify(selectedRS);
+                          const periodeSlug = slugify(data.periode ?? "");
+                          const publicPath = `/${rsSlug}/${periodeSlug}/${filename}`;
 
-                        // Kirim via bulk untuk 1 penerima (lebih cepat karena baca file dari disk)
+                          // Cek apakah file sudah ada di public
+                          let exists = false;
+                          try {
+                            const head = await fetch(publicPath, { method: "HEAD" });
+                            exists = head.ok;
+                          } catch {}
+
+                          if (!exists) {
+                            // generate hanya untuk baris ini di server
+                            const gen = await fetch("/api/slips/generate", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({
+                                rsName: selectedRS,
+                                rsAddress: hospitals[selectedRS],
+                                periode: data.periode ?? "",
+                                rows: [row],
+                              }),
+                            });
+                            if (!gen.ok) return toast.error("Gagal generate PDF di server");
+                          }
+
+                          // Kirim via bulk untuk 1 penerima (lebih cepat karena baca file dari disk)
                         const mail = await fetch("/api/slips/email/bulk", {
                           method: "POST",
                           headers: { "Content-Type": "application/json" },
@@ -383,34 +397,83 @@ export default function SlipPage(): JSX.Element {
                             recipients: [{ email, filename, name: (row["NAMA"] || row["Nama"] || "").toString() }],
                           }),
                         });
-                        if (!mail.ok) return toast.error(`Gagal kirim ke ${email}`);
-                        toast.success(`Email terkirim ke ${email}`);
-                      } catch (err) {
-                        console.error(err);
-                        toast.error("Gagal mengirim email");
-                      }
-                    }}
-                  >Email</Button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+                          if (!mail.ok) return toast.error(`Gagal kirim ke ${email}`);
+                          const resJson = await mail.json();
+                          if (resJson.sent === 1) toast.success(`Email terkirim ke ${email}`);
+                          else if (resJson.skipped === 1) toast.success(`Lewati: sudah pernah terkirim (${email})`);
+                          else toast(`Status: sent=${resJson.sent}, skipped=${resJson.skipped}`);
+                        } catch (err) {
+                          console.error(err);
+                          toast.error("Gagal mengirim email");
+                        }
+                      }}
+                    >Email</Button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
 
-      <div className="flex justify-between items-center mt-4">
-        <p className="text-sm text-gray-500">
-          Menampilkan {filteredRows.length} dari {totalRows} data
-        </p>
-        <Pagination
-          page={page}
-          total={Math.ceil(totalRows / perPage)}
-          onChange={setPage}
-          showControls
-          size="sm"
-        />
+        <div className="flex justify-between items-center mt-4">
+          <p className="text-sm text-gray-500">
+            Menampilkan {filteredRows.length} dari {totalRows} data
+          </p>
+          <Pagination
+            page={page}
+            total={Math.ceil(totalRows / perPage)}
+            onChange={setPage}
+            showControls
+            size="sm"
+          />
+        </div>
       </div>
-    </div>
+      {/* Modal List Terkirim */}
+      <Modal isOpen={showLogs} onOpenChange={setShowLogs} size="xl" scrollBehavior="inside">
+        <ModalContent>
+          {(onClose)=> (
+            <>
+              <ModalHeader>List Terkirim — Periode: {data.periode ?? '-'}</ModalHeader>
+              <ModalBody>
+                {loadingLogs ? (
+                  <p className="text-sm text-default-500">Memuat...</p>
+                ) : logs.length === 0 ? (
+                  <p className="text-sm text-default-500">Belum ada log pengiriman.</p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full text-sm">
+                      <thead>
+                        <tr className="bg-default-100">
+                          <th className="text-left px-3 py-2">Email</th>
+                          <th className="text-left px-3 py-2">Nama</th>
+                          <th className="text-left px-3 py-2">RS</th>
+                          <th className="text-left px-3 py-2">Periode</th>
+                          <th className="text-left px-3 py-2">Waktu</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {logs.map((l)=> (
+                          <tr key={l.id} className="border-b border-default-100">
+                            <td className="px-3 py-2">{l.email}</td>
+                            <td className="px-3 py-2">{l.name || '-'}</td>
+                            <td className="px-3 py-2">{l.rsName || '-'}</td>
+                            <td className="px-3 py-2">{l.periode}</td>
+                            <td className="px-3 py-2">{new Date(l.createdAt).toLocaleString('id-ID')}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </ModalBody>
+              <ModalFooter>
+                <Button variant="flat" onPress={onClose}>Tutup</Button>
+              </ModalFooter>
+            </>
+          )}
+        </ModalContent>
+      </Modal>
+    </>
   );
 }

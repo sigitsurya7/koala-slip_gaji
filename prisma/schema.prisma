@@ -22,3 +22,32 @@ model User {
   updatedAt DateTime @updatedAt
 }
 
+model EmailLog {
+  id       Int      @id @default(autoincrement())
+  email    String
+  periode  String
+  nik      String?
+  name     String?
+  rsName   String?
+  createdAt DateTime @default(now())
+
+  @@unique([periode, email])
+}
+
+model EmailFailLog {
+  id        Int      @id @default(autoincrement())
+  email     String
+  periode   String
+  name      String?
+  rsName    String?
+  error     String?
+  createdAt DateTime @default(now())
+}
+
+model AppSetting {
+  id        Int      @id @default(autoincrement())
+  key       String   @unique
+  value     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

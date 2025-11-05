@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import nodemailer from "nodemailer";
+import { getSMTPSettings } from "@/lib/appSettings";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,13 +30,14 @@ export async function POST(req: NextRequest) {
     const html: string | undefined = body.html; // optional rich format
     if (!to) return NextResponse.json({ message: "Field 'to' is required" }, { status: 400 });
 
-    const service = (process.env.SMTP_SERVICE || "").toLowerCase();
-    const host = process.env.SMTP_HOST || "smtp.gmail.com";
-    const port = Number(process.env.SMTP_PORT || 465);
-    const secure = port === 465 || (process.env.SMTP_SECURE || "").toLowerCase() === "true";
-    const user = required("SMTP_USER");
-    const pass = required("SMTP_PASS");
-    const from = process.env.SMTP_FROM || `HRD ANANDA || SLIP GAJI <${user}>`;
+    const cfg = await getSMTPSettings();
+    const service = cfg.service;
+    const host = cfg.host;
+    const port = cfg.port;
+    const secure = cfg.secure;
+    const user = cfg.user || required("SMTP_USER");
+    const pass = cfg.pass || required("SMTP_PASS");
+    const from = cfg.from || `HRD ANANDA || SLIP GAJI <${user}>`;
 
     const transporter = service === "gmail"
       ? nodemailer.createTransport({
