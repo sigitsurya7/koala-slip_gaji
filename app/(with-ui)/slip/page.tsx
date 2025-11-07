@@ -30,7 +30,7 @@ export default function SlipPage(): JSX.Element {
   const [perPage] = useState(10);
   const [search, setSearch] = useState("");
   const hospitals: Record<string, string> = {
-    "RS ANANDA BEKASI": "Jl. Sultan Agung No.172, Medan Satria, Kecamatan Medan Satria, Kota Bks, Jawa Barat 17132",
+    "RS ANANDA BEKASI": "Jl. Sultan Agung No.173, Medan Satria, Kecamatan Medan Satria, Kota Bks, Jawa Barat 17132",
     "RS ANANDA TAMBUN SELATAN": "Jl. Perumahan Jl. Jatimulya Raya No.1, Jatimulya, Kec. Tambun Sel., Kabupaten Bekasi, Jawa Barat 17510",
     "RS ANANDA BABELAN": "Jl. Raya Babelan No.KM. 9.6, Kebalen, Kec. Babelan, Kabupaten Bekasi, Jawa Barat 17610",
   };
@@ -40,6 +40,28 @@ export default function SlipPage(): JSX.Element {
   const [showLogs, setShowLogs] = useState(false);
   const [logs, setLogs] = useState<Array<{ id:number; email:string; name?:string; rsName?:string; periode:string; createdAt:string }>>([]);
   const [loadingLogs, setLoadingLogs] = useState(false);
+  const [logsQuery, setLogsQuery] = useState("");
+  const [logsPage, setLogsPage] = useState(1);
+  const logsPerPage = 15;
+
+  // Filter + paginate logs
+  const filteredLogs = useMemo(() => {
+    const q = logsQuery.toLowerCase();
+    const arr = !q
+      ? logs
+      : logs.filter((l) =>
+          l.email.toLowerCase().includes(q) ||
+          (l.name || "").toLowerCase().includes(q) ||
+          (l.rsName || "").toLowerCase().includes(q)
+        );
+    return arr;
+  }, [logs, logsQuery]);
+  const totalLogsPages = Math.max(1, Math.ceil(filteredLogs.length / logsPerPage));
+  const currentLogs = useMemo(() => {
+    const start = (logsPage - 1) * logsPerPage;
+    return filteredLogs.slice(start, start + logsPerPage);
+  }, [filteredLogs, logsPage, logsPerPage]);
+  useEffect(() => { setLogsPage(1); }, [logsQuery]);
 
   useEffect(() => {
     const img = new Image();
@@ -158,9 +180,16 @@ export default function SlipPage(): JSX.Element {
     const rows = data.rowsFlat;
     const valids = rows.filter((k) => validateEmail((k["Email"] || k["EMAIL"] || k["email"] || "").toString()));
     if (!valids.length) return toast.error("Tidak ada email valid");
-    const toastId = toast.loading("Menyiapkan generate & email...");
+    const recipients = valids.map((k) => ({
+      email: (k["Email"] || k["EMAIL"] || k["email"]).toString(),
+      filename: `${k["NIK"] || "slip"}_${k["NAMA"] || k["Nama"] || ""}.pdf`.replace(/[^\w\-.]+/g, "_"),
+      name: (k["NAMA"] || k["Nama"] || "").toString(),
+      row: k,
+    }));
+
+    // 1) Generate semua dulu (lebih cepat) agar kirim bisa langsung baca dari disk
+    const toastId = toast.loading("Menyiapkan berkas PDF untuk pengiriman...");
     try {
-      // 1) Pastikan PDF tersimpan di server untuk yang punya email saja
       const genRes = await fetch("/api/slips/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -172,25 +201,33 @@ export default function SlipPage(): JSX.Element {
         }),
       });
       if (!genRes.ok) throw new Error("Gagal generate PDF di server");
-
-      // 2) Kirim email dengan attachment path (lebih cepat)
-      const recipients = valids.map((k) => ({
-        email: (k["Email"] || k["EMAIL"] || k["email"]).toString(),
-        filename: `${k["NIK"] || "slip"}_${k["NAMA"] || k["Nama"] || ""}.pdf`.replace(/[^\w\-.]+/g, "_"),
-        name: (k["NAMA"] || k["Nama"] || "").toString(),
-      }));
-      const mailRes = await fetch("/api/slips/email/bulk", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rsName: selectedRS, periode: data.periode ?? "", recipients }),
-      });
-      if (!mailRes.ok) throw new Error("Gagal kirim email di server");
-      const out = await mailRes.json();
-      toast.success(`Email terkirim: ${out.sent}, lewati: ${out.skipped}, gagal: ${out.failed?.length ?? 0}`, { id: toastId });
     } catch (e: any) {
       console.error(e);
-      toast.error(e?.message || "Gagal kirim email", { id: toastId });
+      return toast.error(e?.message || "Gagal generate di server", { id: toastId });
     }
+
+    // 2) Kirim satu per satu dengan update nama pada toast
+    let sent = 0;
+    let skipped = 0;
+    let failed = 0;
+    for (const r of recipients) {
+      toast.loading(`Menyiapkan generate dan email ke (${r.name || r.email})...`, { id: toastId });
+      try {
+        const mailRes = await fetch("/api/slips/email/bulk", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ rsName: selectedRS, periode: data.periode ?? "", recipients: [{ email: r.email, filename: r.filename, name: r.name }] }),
+        });
+        if (!mailRes.ok) throw new Error("Gagal kirim email di server");
+        const js = await mailRes.json();
+        if (js.sent === 1) sent++;
+        else if (js.skipped === 1) skipped++;
+        else failed++;
+      } catch (e) {
+        failed++;
+      }
+    }
+    toast.success(`Email terkirim: ${sent}, lewati: ${skipped}, gagal: ${failed}`, { id: toastId });
   };
 
   const handleGeneratePDF = async () => {
@@ -277,7 +314,7 @@ export default function SlipPage(): JSX.Element {
                       <th
                         key={`grp-${g.key}-${h}`}
                         rowSpan={2}
-                        className="border px-2 py-1 bg-gray-50 text-center"
+                        className="border px-2 py-1 text-center"
                       >
                         {cleanHeaderLabel(h)}
                       </th>
@@ -296,7 +333,7 @@ export default function SlipPage(): JSX.Element {
                   );
                 })}
                   {/* Tambah kolom aksi (rowspan=2) */}
-                  <th rowSpan={2} className="border px-2 py-1 bg-gray-50 text-center">Aksi</th>
+                  <th rowSpan={2} className="border px-2 py-1 text-center">Aksi</th>
               </tr>
 
               {/* HEADER 2 */}
@@ -309,7 +346,7 @@ export default function SlipPage(): JSX.Element {
                   return g.cols.map((h) => (
                     <th
                       key={`sub-${g.key}-${h}`}
-                      className="border px-2 py-1 bg-gray-50 text-center"
+                      className="border px-2 py-1 text-center"
                     >
                       {cleanHeaderLabel(h)}
                     </th>
@@ -320,7 +357,7 @@ export default function SlipPage(): JSX.Element {
 
             <tbody>
               {filteredRows.map((row, i) => (
-                <tr key={`row-${i}`} className="hover:bg-gray-50">
+                <tr key={`row-${i}`} className="hover:bg-gray-50 hover:dark:text-black hover:cursor-pointer">
                   {headers.map((h) => {
                     const v = row[h];
                     const num = typeof v === "number"
@@ -430,45 +467,75 @@ export default function SlipPage(): JSX.Element {
         </div>
       </div>
       {/* Modal List Terkirim */}
-      <Modal isOpen={showLogs} onOpenChange={setShowLogs} size="xl" scrollBehavior="inside">
-        <ModalContent>
-          {(onClose)=> (
-            <>
-              <ModalHeader>List Terkirim — Periode: {data.periode ?? '-'}</ModalHeader>
-              <ModalBody>
-                {loadingLogs ? (
-                  <p className="text-sm text-default-500">Memuat...</p>
-                ) : logs.length === 0 ? (
-                  <p className="text-sm text-default-500">Belum ada log pengiriman.</p>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full text-sm">
-                      <thead>
-                        <tr className="bg-default-100">
-                          <th className="text-left px-3 py-2">Email</th>
-                          <th className="text-left px-3 py-2">Nama</th>
-                          <th className="text-left px-3 py-2">RS</th>
-                          <th className="text-left px-3 py-2">Periode</th>
-                          <th className="text-left px-3 py-2">Waktu</th>
+    <Modal isOpen={showLogs} onOpenChange={setShowLogs} size="5xl" scrollBehavior="inside">
+      <ModalContent>
+        {(onClose)=> (
+          <>
+            <ModalHeader className="flex flex-col gap-2">
+              <div>List Terkirim — Periode: {data.periode ?? '-'}</div>
+              <div className="flex items-end gap-3">
+                <Input
+                  size="sm"
+                  label="Cari email / nama"
+                  placeholder="Ketik untuk mencari..."
+                  value={logsQuery}
+                  onValueChange={setLogsQuery}
+                  className="max-w-md"
+                />
+                <span className="text-xs text-default-500">Total: {filteredLogs.length}</span>
+              </div>
+            </ModalHeader>
+            <ModalBody>
+              {loadingLogs ? (
+                <p className="text-sm text-default-500">Memuat...</p>
+              ) : logs.length === 0 ? (
+                <p className="text-sm text-default-500">Belum ada log pengiriman.</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-sm">
+                    <thead>
+                      <tr className="bg-default-100">
+                        <th className="text-left px-3 py-2">Email</th>
+                        <th className="text-left px-3 py-2">Nama</th>
+                        <th className="text-left px-3 py-2">RS</th>
+                        <th className="text-left px-3 py-2">Periode</th>
+                        <th className="text-left px-3 py-2">Waktu</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {currentLogs.map((l)=> (
+                        <tr key={l.id} className="border-b border-default-100">
+                          <td className="px-3 py-2">{l.email}</td>
+                          <td className="px-3 py-2">{l.name || '-'}</td>
+                          <td className="px-3 py-2">{l.rsName || '-'}</td>
+                          <td className="px-3 py-2">{l.periode}</td>
+                          <td className="px-3 py-2">{
+                            (() => {
+                              const d = new Date(l.createdAt);
+                              const tanggal = d.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+                              const jam = d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false });
+                              return `${tanggal}, ${jam}`;
+                            })()
+                          }</td>
                         </tr>
-                      </thead>
-                      <tbody>
-                        {logs.map((l)=> (
-                          <tr key={l.id} className="border-b border-default-100">
-                            <td className="px-3 py-2">{l.email}</td>
-                            <td className="px-3 py-2">{l.name || '-'}</td>
-                            <td className="px-3 py-2">{l.rsName || '-'}</td>
-                            <td className="px-3 py-2">{l.periode}</td>
-                            <td className="px-3 py-2">{new Date(l.createdAt).toLocaleString('id-ID')}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </ModalBody>
-              <ModalFooter>
-                <Button variant="flat" onPress={onClose}>Tutup</Button>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </ModalBody>
+              <ModalFooter className="w-full flex items-center justify-between">
+                <div className="text-xs text-default-500">Halaman {logsPage} dari {totalLogsPages}</div>
+                <div className="flex items-center gap-3">
+                  <Pagination
+                    page={logsPage}
+                    total={totalLogsPages}
+                    onChange={setLogsPage}
+                    showControls
+                    size="sm"
+                  />
+                  <Button variant="flat" onPress={onClose}>Tutup</Button>
+                </div>
               </ModalFooter>
             </>
           )}

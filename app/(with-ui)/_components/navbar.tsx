@@ -7,6 +7,7 @@ import { Avatar } from "@heroui/avatar";
 import { User } from "@heroui/user";
 import { Button } from "@heroui/button";
 import { MdMenu } from "react-icons/md";
+import { ThemeSwitch } from "@/components/theme-switch";
 
 type User = { username: string; role: "Admin" | "Member" } | null;
 
@@ -26,6 +27,9 @@ export function AdminNavbar({ user, loading, onLogout, onOpenSidebar }: {
       </NavbarBrand>
       <NavbarContent justify="end">
         <NavbarItem>
+          <ThemeSwitch />
+        </NavbarItem>
+        <NavbarItem>
           {loading ?
             <></>
             :
@@ -37,7 +41,7 @@ export function AdminNavbar({ user, loading, onLogout, onOpenSidebar }: {
                     isBordered: true,
                     src: "https://api.dicebear.com/9.x/avataaars/svg?seed="+ (user ? user?.username : ""),
                   }}
-                  className="transition-transform"
+                  className="transition-transform cursor-pointer"
                   description={user ? "@" + user.role : ""}
                   name={user ? user?.username : ""}
                 />

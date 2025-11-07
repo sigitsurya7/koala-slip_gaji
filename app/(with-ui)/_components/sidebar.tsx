@@ -9,7 +9,7 @@ import { useMemo, useState } from "react";
 
 type User = { username: string; role: "Admin" | "Member" } | null;
 
-export function AdminSidebar({ user, pathname, fullWidth = false }: { user: User; pathname: string | null; fullWidth?: boolean }) {
+export function AdminSidebar({ user, pathname, fullWidth = false, onNavigate }: { user: User; pathname: string | null; fullWidth?: boolean; onNavigate?: () => void }) {
   const isSettingsPath = useMemo(
     () => Boolean(pathname?.startsWith("/settings") || pathname?.startsWith("/users")),
     [pathname]
@@ -34,8 +34,8 @@ export function AdminSidebar({ user, pathname, fullWidth = false }: { user: User
         </div>
         <div className="text-[10px] uppercase tracking-wider text-default-500 px-2 mb-2">Menu</div>
         <div className="px-2 pb-3 space-y-2">
-          <SidebarLink href="/admin" active={pathname === "/admin"} icon={<MdDashboard className="text-sm" />}>Dashboard</SidebarLink>
-          <SidebarLink href="/slip" active={pathname?.startsWith("/slip") ?? false} icon={<MdReceiptLong className="text-sm" />}>Buat Slip</SidebarLink>
+          <SidebarLink href="/admin" active={pathname === "/admin"} icon={<MdDashboard className="text-sm" />} onNavigate={onNavigate}>Dashboard</SidebarLink>
+          <SidebarLink href="/slip" active={pathname?.startsWith("/slip") ?? false} icon={<MdReceiptLong className="text-sm" />} onNavigate={onNavigate}>Buat Slip</SidebarLink>
 
           {user?.role === "Admin" && (
             <div>
@@ -55,8 +55,8 @@ export function AdminSidebar({ user, pathname, fullWidth = false }: { user: User
               </button>
               {settingsOpen && (
                 <div className="mt-1 pl-6 space-y-1">
-                  <SidebarLink href="/settings/users" active={pathname?.startsWith("/settings/users") ?? false}>User Management</SidebarLink>
-                  <SidebarLink href="/settings/app" active={pathname?.startsWith("/settings/app") ?? false}>Aplikasi</SidebarLink>
+                  <SidebarLink href="/settings/users" active={pathname?.startsWith("/settings/users") ?? false} onNavigate={onNavigate}>User Management</SidebarLink>
+                  <SidebarLink href="/settings/app" active={pathname?.startsWith("/settings/app") ?? false} onNavigate={onNavigate}>Aplikasi</SidebarLink>
                 </div>
               )}
             </div>
@@ -68,7 +68,7 @@ export function AdminSidebar({ user, pathname, fullWidth = false }: { user: User
   );
 }
 
-function SidebarLink({ href, active, icon, children }: { href: string; active?: boolean; icon?: React.ReactNode; children: React.ReactNode }) {
+function SidebarLink({ href, active, icon, children, onNavigate }: { href: string; active?: boolean; icon?: React.ReactNode; children: React.ReactNode; onNavigate?: () => void }) {
   return (
     <HeroLink
       as={Link}
@@ -81,6 +81,8 @@ function SidebarLink({ href, active, icon, children }: { href: string; active?: 
           : "hover:bg-default-100"
       )}
       aria-current={active ? "page" : undefined}
+      onPress={onNavigate}
+      onClick={onNavigate}
     >
       {icon}
       <span>{children}</span>

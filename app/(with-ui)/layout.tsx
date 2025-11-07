@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import axios from "axios";
 import toast from "react-hot-toast";
-import { Drawer, DrawerContent, DrawerHeader, DrawerBody } from "@heroui/drawer";
 import { AdminNavbar } from "./_components/navbar";
 import { AdminSidebar } from "./_components/sidebar";
 import { AdminContent } from "./_components/content";
@@ -25,6 +24,11 @@ export default function WithUILayout({ children }: { children: React.ReactNode }
       .catch(() => setUser(null))
       .finally(() => setLoading(false));
   }, []);
+
+  // Tutup drawer mobile saat route berubah
+  useEffect(() => {
+    setSidebarOpen(false);
+  }, [pathname]);
 
   const logout = async () => {
     await toast.promise(axios.post("/api/logout"), {
@@ -57,19 +61,15 @@ export default function WithUILayout({ children }: { children: React.ReactNode }
         </div>
       </div>
 
-      {/* Sidebar (mobile) */}
-      <Drawer isOpen={sidebarOpen} onOpenChange={setSidebarOpen} placement="left">
-        <DrawerContent>
-          {(onClose) => (
-            <>
-              <DrawerHeader className="font-medium">Menu</DrawerHeader>
-              <DrawerBody className="p-0" onClick={() => setSidebarOpen(false)}>
-                <AdminSidebar user={user} pathname={pathname} fullWidth />
-              </DrawerBody>
-            </>
-          )}
-        </DrawerContent>
-      </Drawer>
+      {/* Sidebar (mobile) - custom drawer */}
+      {sidebarOpen && (
+        <div className="fixed inset-0 z-50 md:hidden" role="dialog" aria-modal="true">
+          <div className="absolute inset-0" onClick={() => setSidebarOpen(false)} />
+          <div className="absolute inset-y-0 left-0 w-72 max-w-[80vw]">
+            <AdminSidebar user={user} pathname={pathname} fullWidth onNavigate={() => setSidebarOpen(false)} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
