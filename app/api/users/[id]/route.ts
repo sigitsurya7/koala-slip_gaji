@@ -10,11 +10,15 @@ function requireAdmin(req: NextRequest) {
   return payload;
 }
 
-export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
+type UserRouteContext = { params: Promise<{ id: string }> };
+
+export async function PUT(req: NextRequest, { params }: UserRouteContext) {
+  const { id: rawId } = await params;
   const admin = requireAdmin(req);
   if (!admin) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
 
-  const id = Number(params.id);
+  const id = Number(rawId);
+  if (!Number.isFinite(id)) return NextResponse.json({ message: "Invalid id" }, { status: 400 });
   const body = await req.json();
   const data: any = {};
   if (body.username) data.username = body.username;
@@ -36,10 +40,12 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
   }
 }
 
-export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(req: NextRequest, { params }: UserRouteContext) {
+  const { id: rawId } = await params;
   const admin = requireAdmin(req);
   if (!admin) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
-  const id = Number(params.id);
+  const id = Number(rawId);
+  if (!Number.isFinite(id)) return NextResponse.json({ message: "Invalid id" }, { status: 400 });
   try {
     await prisma.user.delete({ where: { id } });
     return NextResponse.json({ ok: true });
@@ -48,12 +54,13 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
   }
 }
 
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, { params }: UserRouteContext) {
+  const { id: rawId } = await params;
   const admin = requireAdmin(req);
   if (!admin) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
-  const id = Number(params.id);
+  const id = Number(rawId);
+  if (!Number.isFinite(id)) return NextResponse.json({ message: "Invalid id" }, { status: 400 });
   const item = await prisma.user.findUnique({ select: { id: true, username: true, role: true, createdAt: true }, where: { id } });
   if (!item) return NextResponse.json({ message: "Not found" }, { status: 404 });
   return NextResponse.json({ item });
 }
-
